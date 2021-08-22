@@ -23,7 +23,7 @@ class Battle:
         self.cursor_position_moveset = self.CURSOR_POSITION
         self.turn = self.TURN
         self.type_of_battle = type_of_battle
-        self.battle_finished = False
+        self.battle_ended = False
         if self.type_of_battle == "wild":
             self.can_run = True
         else:
@@ -47,13 +47,13 @@ class Battle:
             self.run()
             return
 
-        while not self.battle_finished:
-            super_effective_moves, effective_moves = self.attack(
-                super_effective_moves, effective_moves)
+        while not self.battle_ended:
+            wild_pk, super_effective_moves, effective_moves = self.attack(
+                wild_pk, super_effective_moves, effective_moves)
 
     def run(self) -> None:
         """
-        Moves the cursor to the run position.
+        Moves the cursor to the 'run' position.
         """
 
         if self.cursor_position == 0:
@@ -68,9 +68,10 @@ class Battle:
             print("move right")
             self.cursor_position = 3
         print("press a")
-        self.battle_finished = True
+        self.battle_ended = True
 
-    def attack(self, super_eff_moves: List[Optional[Move]],
+    def attack(self, wild_pk: WildPokemon,
+               super_eff_moves: List[Optional[Move]],
                effective_moves: List[Optional[Move]]):
         if super_eff_moves and any(x.pp for x in super_eff_moves):
             super_eff_moves = sorted(
@@ -80,9 +81,9 @@ class Battle:
             )
             idx = 0
             for move in super_eff_moves:
-                if move.pp == 0:
-                    while super_eff_moves[idx].pp > 0:
-                        print("attack")
+                while move.pp > 0:
+                    print("attack")
+                    move.reduce_pp_after_attacking()
 
         if effective_moves and any(x.pp for x in effective_moves):
             effective_moves = sorted(
@@ -121,6 +122,7 @@ class Battle:
         wild_pokemon_types = [wild_pk.main_type, wild_pk.secondary_type]
         effective_moves = []
         super_effective_moves = []
+
         for move in moves:
             type_index = json_data["types"][move.elemental_type]
             url = f"{os.environ.get('POKEAPI_URL')}/type/{type_index}"
@@ -184,5 +186,5 @@ if __name__ == '__main__':
     )
 
     battle = Battle(type_of_battle='wild')
-    while not battle.battle_finished:
+    while not battle.battle_ended:
         battle.battle(wild_pk=wild_pokemon, party=party)
