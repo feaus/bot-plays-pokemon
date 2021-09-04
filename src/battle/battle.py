@@ -1,6 +1,7 @@
 import json
 import os
 import requests
+import pydirectinput
 
 from dotenv import load_dotenv
 from pathlib import Path
@@ -15,12 +16,13 @@ load_dotenv(f"{Path(__file__).parents[1]}\constants\.env")
 
 
 class Battle:
-    CURSOR_POSITION = 0
+    MENU_CURSOR_POSITION = 0
+    BATTLE_CURSOR_POSITION = 0
     TURN = 0
 
     def __init__(self, type_of_battle):
-        self.cursor_position = self.CURSOR_POSITION
-        self.cursor_position_moveset = self.CURSOR_POSITION
+        self.cursor_position_menu = self.MENU_CURSOR_POSITION
+        self.cursor_position_moveset = self.BATTLE_CURSOR_POSITION
         self.turn = self.TURN
         self.type_of_battle = type_of_battle
         self.battle_ended = False
@@ -33,71 +35,83 @@ class Battle:
         return f"{self.type_of_battle.title()} battle"
 
     def battle(self, wild_pk: WildPokemon, party: Party):
-        super_effective_moves, effective_moves = Battle.are_moves_effective(
-            wild_pk=wild_pk,
-            party_pk=party.pokemon_1
-        )
-
-        if wild_pk.level > party.pokemon_1.level + 2:
-            self.run()
-            return
-
-        if all(moves is None for moves in
-               [super_effective_moves, effective_moves]):
-            self.run()
-            return
-
         while not self.battle_ended:
-            wild_pk, super_effective_moves, effective_moves = self.attack(
-                wild_pk, super_effective_moves, effective_moves)
+            for pokemon in party.list_of_pokemon():
+                super_eff_moves, eff_moves = Battle.are_moves_effective(
+                    wild_pk=wild_pk,
+                    party_pk=pokemon
+                )
+
+                if wild_pk.level > party.pokemon_1.level + 2:
+                    self.run()
+                    self.battle_ended = True
+                    return
+
+                if all(moves is None for moves in
+                       [super_eff_moves, eff_moves]):
+                    self.run()
+                    self.battle_ended = True
+                    return
+
+                wild_pk, pokemon, super_eff_moves, eff_moves = self.attack(
+                    wild_pk, pokemon, super_eff_moves, eff_moves)
+
+            self.battle_ended = True  # I must have lost
 
     def run(self) -> None:
         """
         Moves the cursor to the 'run' position.
         """
 
-        if self.cursor_position == 0:
-            print("move right")
-            self.cursor_position = 1
+        if self.cursor_position_menu == 0:
+            pydirectinput.press('right')
+            self.cursor_position_menu = 1
 
-        if self.cursor_position == 1:
-            print("move down")
-            self.cursor_position = 3
+        if self.cursor_position_menu == 1:
+            pydirectinput.press('down')
+            self.cursor_position_menu = 3
 
-        if self.cursor_position == 2:
-            print("move right")
-            self.cursor_position = 3
-        print("press a")
+        if self.cursor_position_menu == 2:
+            pydirectinput.press('right')
+            self.cursor_position_menu = 3
+        pydirectinput.press('x')
         self.battle_ended = True
 
-    def attack(self, wild_pk: WildPokemon,
+    def attack(self, wild_pk: WildPokemon, pokemon: PartyPokemon,
                super_eff_moves: List[Optional[Move]],
                effective_moves: List[Optional[Move]]):
+        """
+        Moves the cursor to the 'Fight' position on the main menu, and
+        constantly attacks until the enemy has fainted.
+
+        :param wild_pk: the wild pokemon
+        :param pokemon: my own pokemon
+        :param super_eff_moves: list of super effective moves
+        :param effective_moves: list of effective moves
+        """
+
+        if self.cursor_position_menu == 3:
+            pydirectinput.press('up')
+            self.cursor_position_menu = 1
+
+        if self.cursor_position_menu == 1:
+            pydirectinput.press('left')
+
+        elif self.cursor_position_menu == 2:
+            pydirectinput.press('up')
+
+        self.cursor_position_menu = 0
+        pydirectinput.press('x')
+
         if super_eff_moves and any(x.pp for x in super_eff_moves):
-            super_eff_moves = sorted(
-                super_eff_moves,
-                key=lambda a: (a.power, a.accuracy, a.pp),
-                reverse=True
-            )
-            idx = 0
-            for move in super_eff_moves:
-                while move.pp > 0:
-                    print("attack")
-                    move.reduce_pp_after_attacking()
+            wild_pk, super_eff_moves = self._attack_moves(
+                wild_pk, super_eff_moves)
 
         if effective_moves and any(x.pp for x in effective_moves):
-            effective_moves = sorted(
-                effective_moves,
-                key=lambda a: (a.power, a.accuracy, a.pp),
-                reverse=True
-            )
+            wild_pk, effective_moves = self._attack_moves(
+                wild_pk, effective_moves)
 
-            for move in effective_moves:
-                while move.pp > 0:
-                    print("attack")
-                    move.reduce_pp_after_attacking()
-
-        return super_eff_moves, effective_moves
+        return wild_pk, super_eff_moves, effective_moves
 
     @staticmethod
     def kind_of_damage(response: dict, wild_pokemon_types: list,
@@ -146,6 +160,48 @@ class Battle:
                 continue
             effective_moves.append(move)
         return super_effective_moves, effective_moves
+
+    def _attack_moves(self, wild_pk: WildPokemon, moves: list):
+        """
+        It will constantly attack until there is no PP left, or the enemy has
+        fainted.
+        """
+
+        moves = sorted(
+            moves,
+            key=lambda a: (a.power, a.accuracy, a.pp),
+            reverse=True
+        )
+        for move in moves:
+            while move.pp > 0:
+                self._move_cursor_moveset(move)
+                pydirectinput.press('x')
+
+                wild_pk.change_health(20)
+
+                print(f"Wild pokemon's health: {wild_pk.health}")
+
+                move.reduce_pp_after_attacking()
+
+                if wild_pk.health <= 0:
+                    self.battle_ended = True
+                    break
+            else:
+                continue
+            break
+        return moves, wild_pk
+
+    def _move_cursor_moveset(self, move: Move):
+        """
+        Moves the cursor in the 'Fight' menu to the correct move position.
+        """
+
+        while move.slot_position < self.cursor_position_moveset:
+            pydirectinput.press('up')
+            self.cursor_position_moveset -= 1
+        while move.slot_position > self.cursor_position_moveset:
+            pydirectinput.press('down')
+            self.cursor_position_moveset += 1
 
 
 if __name__ == '__main__':
