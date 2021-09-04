@@ -1,3 +1,6 @@
+from src.battle.party_pokemon import PartyPokemon
+
+
 class Party:
     def __init__(self):
         self.pokemon_1 = None
@@ -10,7 +13,7 @@ class Party:
     def __repr__(self):
         return "Pokemon party object"
 
-    def modify_party(self, pokemon, slot: int):
+    def modify_party(self, pokemon: PartyPokemon, slot: int):
         if slot == 1:
             self.pokemon_1 = pokemon
         elif slot == 2:
@@ -34,3 +37,7 @@ class Party:
 
     def list_of_attributes(self):
         return vars(self)
+
+    def list_of_pokemon(self):
+        return [self.pokemon_1, self.pokemon_2, self.pokemon_3, self.pokemon_4,
+                self.pokemon_5, self.pokemon_6]
