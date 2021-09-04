@@ -19,4 +19,4 @@ class WildPokemon:
         self.status = status
 
     def change_health(self, hitpoints: int):
-        self.health += hitpoints
+        self.health -= hitpoints
